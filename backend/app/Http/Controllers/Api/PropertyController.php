@@ -3,51 +3,71 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Property;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class PropertyController extends Controller
 {
+    /**
+     * Liste publique des biens validés (avec filtres)
+     */
     public function index(Request $request)
     {
-        $query = Property::query()->where('is_validated', true);
+        $query = Property::where('is_validated', true);
 
         if ($request->filled('city')) {
-            $query->where('city', $request->city);
+            $query->where('city', 'like', '%' . $request->city . '%');
         }
 
-        if ($request->filled('min_price') && $request->filled('max_price')) {
-            $query->whereBetween('price', [$request->min_price, $request->max_price]);
+        if ($request->filled('min_price')) {
+            $query->where('price', '>=', $request->min_price);
         }
+
+        if ($request->filled('max_price')) {
+            $query->where('price', '<=', $request->max_price);
+        }
+
+        $properties = $query->latest()->paginate(10);
 
         return response()->json([
-            'status'  => true,
-            'message' => 'Liste des biens récupérée.',
-            'data'    => $query->paginate(10),
+            'status' => true,
+            'data' => $properties,
         ]);
     }
 
+    /**
+     * Détails d’un bien (contrôle d’accès)
+     */
     public function show($id)
     {
+        /** @var \App\Models\User $auth */
+        $auth = Auth::user();
         $property = Property::findOrFail($id);
 
+        if (!$property->is_validated && !$auth::user()->hasRole('admin') && $property->user_id !== Auth::id()) {
+            abort(403, 'Accès refusé');
+        }
+
         return response()->json([
-            'status'  => true,
-            'message' => 'Détails du bien.',
-            'data'    => $property,
+            'status' => true,
+            'data' => $property,
         ]);
     }
 
+    /**
+     * Création d’un nouveau bien (bailleur)
+     */
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'title'       => 'required|string|max:255',
+            'title' => 'required|string|max:255',
             'description' => 'required|string',
-            'price'       => 'required|numeric|min:0',
-            'address'     => 'required|string|max:255',
-            'city'        => 'required|string|max:100',
-            'visit_price' => 'nullable|numeric|min:0',
+            'price' => 'required|numeric|min:0',
+            'address' => 'required|string|max:255',
+            'city' => 'required|string|max:100',
+            'visit_fee' => 'nullable|numeric|min:0',
         ]);
 
         $validated['user_id'] = Auth::id();
@@ -56,66 +76,82 @@ class PropertyController extends Controller
         $property = Property::create($validated);
 
         return response()->json([
-            'status'  => true,
-            'message' => 'Bien soumis pour validation.',
-            'data'    => $property,
-        ]);
+            'status' => true,
+            'message' => 'Bien soumis pour validation par un administrateur.',
+            'data' => $property,
+        ], 201);
     }
 
+    /**
+     * Mise à jour d’un bien (propriétaire uniquement)
+     */
     public function update(Request $request, $id)
     {
         $property = Property::findOrFail($id);
 
         if ($property->user_id !== Auth::id()) {
-            return response()->json(['status' => false, 'message' => 'Accès refusé.'], 403);
+            abort(403, 'Accès refusé');
         }
 
         if ($property->is_validated) {
-            return response()->json(['status' => false, 'message' => 'Bien déjà validé. Modification refusée.'], 403);
+            abort(403, 'Ce bien est déjà validé et ne peut plus être modifié.');
         }
 
         $validated = $request->validate([
-            'title'       => 'nullable|string|max:255',
-            'description' => 'nullable|string',
-            'price'       => 'nullable|numeric|min:0',
-            'address'     => 'nullable|string|max:255',
-            'city'        => 'nullable|string|max:100',
-            'visit_price' => 'nullable|numeric|min:0',
+            'title' => 'sometimes|string|max:255',
+            'description' => 'sometimes|string',
+            'price' => 'sometimes|numeric|min:0',
+            'address' => 'sometimes|string|max:255',
+            'city' => 'sometimes|string|max:100',
+            'visit_fee' => 'nullable|numeric|min:0',
         ]);
 
         $property->update($validated);
 
         return response()->json([
-            'status'  => true,
-            'message' => 'Bien mis à jour.',
-            'data'    => $property,
+            'status' => true,
+            'message' => 'Bien mis à jour avec succès.',
+            'data' => $property,
         ]);
     }
 
+    /**
+     * Suppression d’un bien (propriétaire uniquement)
+     */
     public function destroy($id)
     {
         $property = Property::findOrFail($id);
 
         if ($property->user_id !== Auth::id()) {
-            return response()->json(['status' => false, 'message' => 'Accès refusé.'], 403);
+            abort(403, 'Accès refusé');
         }
 
         $property->delete();
 
         return response()->json([
-            'status'  => true,
-            'message' => 'Bien supprimé.',
+            'status' => true,
+            'message' => 'Bien supprimé avec succès.',
         ]);
     }
 
-    public function byUser($id)
+    /**
+     * Biens d’un utilisateur (accès restreint)
+     */
+    public function byUser($user_id)
     {
-        $properties = Property::where('user_id', $id)->get();
+        /** @var \App\Models\User $auth */
+        $auth = Auth::user();
+
+        // Autoriser admin ou le propriétaire lui-même
+        if ($auth->id != $user_id && ! $auth->hasRole('admin')) {
+            abort(403, 'Accès refusé');
+        }
+
+        $properties = Property::where('user_id', $user_id)->get();
 
         return response()->json([
-            'status'  => true,
-            'message' => 'Biens de l’utilisateur récupérés.',
-            'data'    => $properties,
+            'status' => true,
+            'data' => $properties,
         ]);
     }
 }

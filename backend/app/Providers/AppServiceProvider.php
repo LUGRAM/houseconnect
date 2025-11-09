@@ -6,7 +6,7 @@ use Illuminate\Support\ServiceProvider;
 use App\Models\User;
 use App\Models\Payment;
 use App\Observers\{UserObserver, PaymentObserver};
-use App\Settings\SystemSetting;
+use App\Settings\SystemSettings;
 use App\Observers\SystemSettingObserver;
 
 class AppServiceProvider extends ServiceProvider
@@ -27,7 +27,7 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function registerSystemSettingObserver(): void
     {
-        app()->resolving(SystemSetting::class, function ($setting) {
+        app()->resolving(SystemSettings::class, function ($setting) {
             // Exécution de logique custom quand la config est modifiée
             app(SystemSettingObserver::class)->updated($setting);
         });
