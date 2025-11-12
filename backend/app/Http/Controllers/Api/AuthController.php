@@ -16,7 +16,7 @@ class AuthController extends Controller
             'name'     => 'required|string|max:100',
             'email'    => 'nullable|email|unique:users,email',
             'phone'    => 'required|string|unique:users,phone',
-            'password' => 'required|min:6',
+            'password' => 'required|string|min:6|confirmed',
         ]);
 
         $validated['password'] = Hash::make($validated['password']);
@@ -33,14 +33,18 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $validated = $request->validate([
-            'email'    => 'nullable|email',
-            'phone'    => 'nullable|string',
-            'password' => 'required',
+            'email'    => 'nullable|email|required_without:phone',
+            'phone'    => 'nullable|string|required_without:email',
+            'password' => 'required|string|min:6',
         ]);
 
-        $user = User::where('email', $validated['email'] ?? null)
-            ->orWhere('phone', $validated['phone'] ?? null)
-            ->first();
+        if (!empty($validated['email'])) {
+            $user = User::where('email', $validated['email'])->first();
+        } elseif (!empty($validated['phone'])) {
+            $user = User::where('phone', $validated['phone'])->first();
+        } else {
+            return response()->json(['message' => 'Email ou téléphone requis.'], 422);
+        }
 
         if (! $user || ! Hash::check($validated['password'], $user->password)) {
             throw ValidationException::withMessages([
@@ -72,9 +76,14 @@ class AuthController extends Controller
 
         $validated = $request->validate([
             'name'  => 'nullable|string|max:100',
-            'email' => 'nullable|email|unique:users,email,' . $user->id,
-            'phone' => 'nullable|string|unique:users,phone,' . $user->id,
+            'email' => 'nullable|email|required_without:phone|unique:users,email,' . $user->id,
+            'phone' => 'nullable|string|required_without:email|unique:users,phone,' . $user->id,
+            'password' => 'nullable|string|min:6|confirmed',
         ]);
+
+        if (!empty($validated['password'])) {
+            $validated['password'] = Hash::make($validated['password']);
+        }
 
         $user->update($validated);
 
@@ -93,5 +102,21 @@ class AuthController extends Controller
             'status'  => true,
             'message' => 'Déconnexion réussie.',
         ]);
+    }
+
+    public function sendOtp(Request $request)
+    {
+        return response()->json([
+            'status'  => false,
+            'message' => 'Fonctionnalité OTP non encore disponible',
+        ], 501);
+    }
+
+    public function verifyOtp(Request $request)
+    {
+        return response()->json([
+            'status'  => false,
+            'message' => 'Fonctionnalité OTP non encore disponible',
+        ], 501);
     }
 }

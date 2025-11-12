@@ -2,7 +2,7 @@
 
 namespace App\Observers;
 
-use App\Settings\SystemSetting;
+use App\Settings\SystemSettings;
 use Illuminate\Support\Facades\Log;
 
 class SystemSettingObserver
@@ -10,7 +10,7 @@ class SystemSettingObserver
     /**
      * Empêche la modification d’un paramètre verrouillé.
      */
-    public function updating(SystemSetting $setting): void
+    public function updating(SystemSettings $setting): void
     {
         if ($setting->locked ?? false) {
             throw new \Exception("Impossible de modifier le paramètre verrouillé : {$setting->group}");
@@ -20,7 +20,7 @@ class SystemSettingObserver
     /**
      * Journalise chaque mise à jour de configuration.
      */
-    public function updated(SystemSetting $setting): void
+    public function updated(SystemSettings $setting): void
     {
         Log::info('Paramètre système modifié', [
             'group' => $setting->group,
