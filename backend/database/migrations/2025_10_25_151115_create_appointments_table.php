@@ -21,19 +21,13 @@ return new class extends Migration
                 ->constrained('properties')
                 ->restrictOnDelete();
 
-            $table->foreignId('payment_id')
-                ->nullable()
-                ->constrained('payments')
-                ->nullOnDelete();
-
-
             // Données principales
             $table->timestamp('scheduled_at');
             $table->string('status')->default(AppointmentStatus::PENDING->value)->index();
             
             $table->index(['user_id', 'property_id']);
-            
-            $table->string('cancel_reason')->nullable() ;
+            $table->enum('cancel_reason', ['client', 'bailleur', 'system'])->nullable();
+
             // Suivi des rappels
             $table->timestamp('reminder_sent_at')->nullable();
 

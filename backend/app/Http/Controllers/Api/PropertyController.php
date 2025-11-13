@@ -63,6 +63,7 @@ class PropertyController extends Controller
     {
         $validated = $request->validate([
             'title' => 'required|string|max:255',
+            'title' => 'required|string|max:255',
             'description' => 'required|string',
             'price' => 'required|numeric|min:0',
             'address' => 'required|string|max:255',
@@ -148,8 +149,19 @@ class PropertyController extends Controller
         }
 
         $properties = Property::where('user_id', $user_id)->get();
+        /** @var \App\Models\User $auth */
+        $auth = Auth::user();
+
+        // Autoriser admin ou le propriétaire lui-même
+        if ($auth->id != $user_id && ! $auth->hasRole('admin')) {
+            abort(403, 'Accès refusé');
+        }
+
+        $properties = Property::where('user_id', $user_id)->get();
 
         return response()->json([
+            'status' => true,
+            'data' => $properties,
             'status' => true,
             'data' => $properties,
         ]);

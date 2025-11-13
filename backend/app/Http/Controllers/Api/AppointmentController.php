@@ -27,7 +27,10 @@ class AppointmentController extends Controller
     }
 
     /**
-     * Crée un rendez-vous pour le client connecté.
+     * Crée un rendez-vous pour une visite de bien.
+     * - Vérifie que la propriété existe et est validée.
+     * - Enregistre un rendez-vous en attente de paiement.
+     * - Retourne l’identifiant et le tarif de visite.
      */
     public function store(Request $request)
     {
@@ -107,7 +110,7 @@ class AppointmentController extends Controller
         ]);
     }
 
-     /**
+    /**
      * Afficher le détail d’un rendez-vous
      */
     public function show(Appointment $appointment)

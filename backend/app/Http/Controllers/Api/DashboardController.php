@@ -8,10 +8,24 @@ use App\Services\Dashboard\DashboardService;
 
 class DashboardController extends Controller
 {
-    public function summary(DashboardService $dashboardService)
+    public function landlordSummary(DashboardService $dashboardService)
     {
         return response()->json([
-            'data' => $dashboardService->summary(),
+            'data' => $dashboardService->landlordSummary(),
+        ]);
+    }
+    
+    public function clientSummary(DashboardService $dashboardService)
+    {
+        return response()->json([
+            'data' => $dashboardService->clientSummary(),
+        ]);
+    }
+
+    public function adminSummary(DashboardService $dashboardService)
+    {
+        return response()->json([
+            'data' => $dashboardService->adminSummary(),
         ]);
     }
 }

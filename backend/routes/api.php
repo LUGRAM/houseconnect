@@ -8,128 +8,122 @@ use App\Http\Controllers\Api\{
     PaymentController,
     ExpenseController,
     DashboardController,
-    DashboardAdminController,
     InvoiceController
 };
 
 /*
 |--------------------------------------------------------------------------
-| API Routes — HouseConnect
-|--------------------------------------------------------------------------
-| Organisation :
-| - Auth & public
-| - Webhooks (externes)
-| - Protected routes (auth:sanctum)
-|   - Client
-|   - Bailleur
-|   - Admin
-|--------------------------------------------------------------------------
-*/
-
-/*
-|--------------------------------------------------------------------------
-| ROUTES PUBLIQUES
+| PUBLIC ROUTES
 |--------------------------------------------------------------------------
 */
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/login',    [AuthController::class, 'login']);
 });
 
+// Webhook CinetPay (pas de Sanctum)
 Route::post('/payments/cinetpay/webhook', [PaymentController::class, 'webhook'])
-    ->name('api.cinetpay.webhook')
-    ->withoutMiddleware('auth:sanctum');
+    ->withoutMiddleware('auth:sanctum')
+    ->name('api.cinetpay.webhook');
+
 
 /*
 |--------------------------------------------------------------------------
-| ROUTES PROTÉGÉES
+| PROTECTED ROUTES
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth:sanctum'])->group(function () {
 
     /*
-    |---------------------------------------------
-    | AUTH UTILISATEUR
-    |---------------------------------------------
+    |--------------------------------------------------------------------------
+    | AUTH
+    |--------------------------------------------------------------------------
     */
-    Route::get('/me', [AuthController::class, 'me']);
-    Route::post('/logout', [AuthController::class, 'logout']);
-    Route::put('/update-profile', [AuthController::class, 'updateProfile']);
+    Route::get('/me',              [AuthController::class, 'me']);
+    Route::post('/logout',         [AuthController::class, 'logout']);
+    Route::put('/update-profile',  [AuthController::class, 'updateProfile']);
+
+
 
     /*
-    |---------------------------------------------
-    | CLIENT — Rendez-vous, Paiements, Tableau
-    |---------------------------------------------
+    |--------------------------------------------------------------------------
+    | CLIENT — Routes client ONLY
+    |--------------------------------------------------------------------------
     */
+    Route::middleware(['role:client'])->prefix('client')->group(function () {
 
-    // Rendez-vous accessibles selon le rôle
-    Route::middleware(['role:client|bailleur|admin'])->group(function () {
-        Route::get('/appointments', [AppointmentController::class, 'index']);            Route::post('/appointments', [AppointmentController::class, 'store']);
+        // Dashboard
+        Route::get('/dashboard', [DashboardController::class, 'clientSummary']);
+
+        // Appointments
+        Route::get('/appointments',           [AppointmentController::class, 'index']);
+        Route::post('/appointments',          [AppointmentController::class, 'store']);
         Route::patch('/appointments/{id}/cancel', [AppointmentController::class, 'cancel']);
-        Route::get('/appointments/owned', [AppointmentController::class, 'owned']); // vue bailleur
-        Route::get('/appointments/{appointment}', [AppointmentController::class, 'show']); // détail
+        
+        // Payments
+        Route::get('/payments',           [PaymentController::class, 'index']);
+        Route::post('/payments/initiate', [PaymentController::class, 'initiate']);
+        Route::get('/payments/{id}',      [PaymentController::class, 'show']);
+
+        // Invoices
+        Route::get('/invoices',        [InvoiceController::class, 'index']);
+        Route::get('/invoices/{id}',   [InvoiceController::class, 'show']);
+        Route::post('/invoices/generate/{paymentId}', [InvoiceController::class, 'generateFromPayment']);
     });
 
 
-    // Paiements
-    Route::prefix('payments')->group(function () {
-        Route::get('/', [PaymentController::class, 'index']);            Route::post('/initiate', [PaymentController::class, 'initiate']);
-        Route::get('/{id}', [PaymentController::class, 'show']);
-    });
-
-    // Tableau client/bailleur unifié
-    Route::get('/dashboard', action: [DashboardController::class, 'summary']);
-    
-    // Factures
-    Route::get('invoices', [InvoiceController::class, 'index']);
-    Route::get('invoices/{id}', [InvoiceController::class, 'show']);
-    Route::post('invoices/generate/{paymentId}', [InvoiceController::class, 'generateFromPayment']);
-    Route::post('invoices/generate-monthly', [InvoiceController::class, 'generateMonthly']);
-    Route::post('invoices/mark-overdue', [InvoiceController::class, 'markOverdue']);
 
     /*
-    |---------------------------------------------
-    | BAILLEUR — Gestion de propriétés et dépenses
-    |---------------------------------------------
+    |--------------------------------------------------------------------------
+    | BAILLEUR — Routes bailleur ONLY
+    |--------------------------------------------------------------------------
     */
-    Route::middleware('role:bailleur|admin')->group(function () {
-        // Propriétés
+    Route::middleware(['role:bailleur'])->prefix('bailleur')->group(function () {
+
+        // Dashboard
+        Route::get('/dashboard', [DashboardController::class, 'landlordSummary']);
+
+        // Properties
         Route::prefix('properties')->group(function () {
-            Route::post('/', [PropertyController::class, 'store']);
-            Route::put('/{id}', [PropertyController::class, 'update']);
-            Route::delete('/{id}', [PropertyController::class, 'destroy']);
-            Route::get('/user/{id}', [PropertyController::class, 'getUserProperties'])
-                ->middleware('can:view-user-properties,id');
+            Route::post('/',          [PropertyController::class, 'store']);
+            Route::put('/{id}',       [PropertyController::class, 'update']);
+            Route::delete('/{id}',    [PropertyController::class, 'destroy']);
+            Route::get('/user/{id}',  [PropertyController::class, 'getUserProperties']);
         });
 
-        // Dépenses liées aux biens
+        // Expenses
         Route::apiResource('expenses', ExpenseController::class);
+
+        // Monthly invoices generation
+        Route::post('/invoices/generate-monthly', [InvoiceController::class, 'generateMonthly']);
     });
+
+
 
     /*
-    |---------------------------------------------
-    | ADMIN — Vue globale
-    |---------------------------------------------
+    |--------------------------------------------------------------------------
+    | ADMIN — Routes admin ONLY
+    |--------------------------------------------------------------------------
     */
-    Route::middleware('role:admin')->group(function () {
-        Route::get('/dashboard', [DashboardAdminController::class, 'summary']);
-    });
+    Route::middleware(['role:admin'])->prefix('admin')->group(function () {
 
+        // Dashboard
+        Route::get('/dashboard', [DashboardController::class, 'adminSummary']);
+
+        // Global overdue marking
+        Route::post('/invoices/mark-overdue', [InvoiceController::class, 'markOverdue']);
+    });
 });
+
 
 /*
 |--------------------------------------------------------------------------
-| ROUTE DE SECOURS (404)
+| 404 FALLBACK
 |--------------------------------------------------------------------------
 */
 Route::fallback(function () {
     return response()->json([
-        'status'  => false,
+        'status' => false,
         'message' => 'Endpoint API introuvable.'
     ], 404);
 });
-
-// Dashboard  (pour client ayant un bail)
-Route::get('/dashboard', [DashboardController::class, 'clientsummary'])
-    ->middleware(['auth:sanctum', 'role:client']);
-

@@ -18,7 +18,7 @@ class Expense extends Model
         'category',
         'amount',
         'date',
-        'note',
+        'notes',
     ];
 
     // Les attributs castés automatiquement.
