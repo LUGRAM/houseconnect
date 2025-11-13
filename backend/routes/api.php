@@ -8,7 +8,8 @@ use App\Http\Controllers\Api\{
     PaymentController,
     ExpenseController,
     DashboardController,
-    InvoiceController
+    InvoiceController,
+    RefundController
 };
 
 /*
@@ -21,7 +22,7 @@ Route::prefix('auth')->group(function () {
     Route::post('/login',    [AuthController::class, 'login']);
 });
 
-// Webhook CinetPay (pas de Sanctum)
+// Webhook CinetPay (sans Sanctum)
 Route::post('/payments/cinetpay/webhook', [PaymentController::class, 'webhook'])
     ->withoutMiddleware('auth:sanctum')
     ->name('api.cinetpay.webhook');
@@ -34,6 +35,7 @@ Route::post('/payments/cinetpay/webhook', [PaymentController::class, 'webhook'])
 */
 Route::middleware(['auth:sanctum'])->group(function () {
 
+
     /*
     |--------------------------------------------------------------------------
     | AUTH
@@ -42,7 +44,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/me',              [AuthController::class, 'me']);
     Route::post('/logout',         [AuthController::class, 'logout']);
     Route::put('/update-profile',  [AuthController::class, 'updateProfile']);
-
 
 
     /*
@@ -56,21 +57,23 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'clientSummary']);
 
         // Appointments
-        Route::get('/appointments',           [AppointmentController::class, 'index']);
-        Route::post('/appointments',          [AppointmentController::class, 'store']);
-        Route::patch('/appointments/{id}/cancel', [AppointmentController::class, 'cancel']);
-        
+        Route::get('/appointments',                 [AppointmentController::class, 'index']);
+        Route::post('/appointments',                [AppointmentController::class, 'store']);
+        Route::patch('/appointments/{id}/cancel',   [AppointmentController::class, 'cancel']);
+
         // Payments
         Route::get('/payments',           [PaymentController::class, 'index']);
         Route::post('/payments/initiate', [PaymentController::class, 'initiate']);
         Route::get('/payments/{id}',      [PaymentController::class, 'show']);
 
         // Invoices
-        Route::get('/invoices',        [InvoiceController::class, 'index']);
-        Route::get('/invoices/{id}',   [InvoiceController::class, 'show']);
+        Route::get('/invoices',                   [InvoiceController::class, 'index']);
+        Route::get('/invoices/{id}',              [InvoiceController::class, 'show']);
         Route::post('/invoices/generate/{paymentId}', [InvoiceController::class, 'generateFromPayment']);
-    });
 
+        // Refunds
+        Route::post('/refunds/request', [RefundController::class, 'requestRefund']);
+    });
 
 
     /*
@@ -96,8 +99,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         // Monthly invoices generation
         Route::post('/invoices/generate-monthly', [InvoiceController::class, 'generateMonthly']);
-    });
 
+        // Refunds
+        Route::post('/refunds/request', [RefundController::class, 'requestRefund']);
+    });
 
 
     /*
@@ -112,6 +117,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         // Global overdue marking
         Route::post('/invoices/mark-overdue', [InvoiceController::class, 'markOverdue']);
+
+        // Refund approvals
+        Route::post('/refunds/{refund}/approve', [RefundController::class, 'approve']);
+
+        // Refund listing
+        Route::get('/refunds', [RefundController::class, 'index']);
     });
 });
 

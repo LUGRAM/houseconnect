@@ -50,12 +50,15 @@ class Appointment extends Model
     //Scopes Eloquent.
     public function scopeUpcoming(Builder $query): Builder
     {
-        
+        $start = now();
+        $end = (clone $start)->addDay();
+
         return $query
             ->whereNull('reminder_sent_at')
             ->where('status', AppointmentStatus::CONFIRMED)
-            ->whereBetween('scheduled_at', [Carbon::now(), Carbon::now()->addDay()]);
+            ->whereBetween('scheduled_at', [$start, $end]);
     }
+
 
     //Méthode utilitaire : marquer comme rappelé.
     public function markAsReminded(): void{$this->update(['reminder_sent_at' => now()]);}

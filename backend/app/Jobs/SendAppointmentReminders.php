@@ -2,42 +2,64 @@
 
 namespace App\Jobs;
 
+use App\Models\Appointment;
+use App\Notifications\UpcomingAppointmentNotification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
-use App\Models\Appointment;
-use App\Services\Notifications\NotificationService;
 
 class SendAppointmentReminders implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Queueable, InteractsWithQueue, SerializesModels;
 
-    public int $tries = 3;
-    public int $timeout = 120;
+    /**
+     * Nombre de tentatives max du job
+     */
+    public $tries = 3;
 
-    public function handle(NotificationService $notificationService): void
+    /**
+     * Timeout (secondes)
+     */
+    public $timeout = 20;
+
+    public function __construct()
     {
-        $appointments = Appointment::needingReminder()->get();
+        //
+    }
 
-        Log::info('Appointment reminders processing', ['count' => $appointments->count()]);
+    /**
+     * Exécution du job
+     */
+    public function handle(): void
+    {
+        Log::info('Starting appointment reminder job...');
 
-        foreach ($appointments as $appointment) {
-            try {
-                $notificationService->sendAppointmentReminder($appointment);
+        Appointment::upcoming() // utilise ton scope
+            ->with('user')
+            ->chunk(50, function ($appointments) {
 
-                Log::info(' Reminder sent', [
-                    'appointment_id' => $appointment->id,
-                    'client_id'      => $appointment->client_id,
-                ]);
-            } catch (\Throwable $e) {
-                Log::error('Reminder failed', [
-                    'appointment_id' => $appointment->id,
-                    'error'          => $e->getMessage(),
-                ]);
-            }
-        }
+                foreach ($appointments as $appointment) {
+
+                    if (! $appointment->user) {
+                        continue;
+                    }
+
+                    // Envoi notification
+                    $appointment->user->notify(
+                        new UpcomingAppointmentNotification($appointment)
+                    );
+
+                    // Sécurise l’envoi unique
+                    $appointment->update([
+                        'reminder_sent_at' => now()
+                    ]);
+
+                    Log::info("Reminder sent for appointment #{$appointment->id}");
+                }
+            });
+
+        Log::info('Appointment reminder job completed.');
     }
 }

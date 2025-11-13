@@ -3,13 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use App\Models\{Payment, Refund};
-use App\Services\RefundService;
+use App\Services\Refunds\RefundService;
+use App\Enums\RefundStatus;
 
 class RefundController extends Controller
 {
+    use AuthorizesRequests;
+
     protected RefundService $refundService;
 
     public function __construct(RefundService $refundService)
@@ -18,7 +22,7 @@ class RefundController extends Controller
     }
 
     /**
-     * 📌 Client ou bailleur — crée une demande de remboursement
+     * Client ou bailleur — crée une demande de remboursement
      */
     public function requestRefund(Request $request)
     {
@@ -29,7 +33,6 @@ class RefundController extends Controller
 
         $payment = Payment::find($request->payment_id);
 
-        // Vérification : le paiement appartient bien à l’utilisateur
         if ($payment->user_id !== $request->user()->id) {
             return response()->json([
                 'success' => false,
@@ -37,7 +40,6 @@ class RefundController extends Controller
             ], 403);
         }
 
-        // Déjà remboursé ?
         if ($payment->refunded) {
             return response()->json([
                 'success' => false,
@@ -45,18 +47,17 @@ class RefundController extends Controller
             ], 400);
         }
 
-        // Enregistrement de la demande
         $refund = Refund::create([
-            'payment_id' => $payment->id,
-            'amount'     => $payment->amount, // ou calcul partiel si applicable
-            'reason'     => $request->reason,
-            'status'     => 'pending',
+            'payment_id'   => $payment->id,
+            'amount'       => $payment->amount,
+            'reason'       => $request->reason,
+            'status'       => RefundStatus::PENDING, // enum ici
             'requested_by' => $request->user()->id,
         ]);
 
         Log::info("Demande de remboursement créée", [
-            'refund_id' => $refund->id,
-            'user_id' => $request->user()->id,
+            'refund_id'  => $refund->id,
+            'user_id'    => $request->user()->id,
             'payment_id' => $payment->id,
         ]);
 
@@ -68,13 +69,13 @@ class RefundController extends Controller
     }
 
     /**
-     * 📌 Admin — approuve et exécute un remboursement
+     * Admin — approuve et exécute un remboursement
      */
     public function approve(Request $request, Refund $refund)
     {
-        $this->authorize('approve-refund'); // policy ou gate admin-only
+        $this->authorize('approve', $refund);
 
-        if ($refund->status !== 'pending') {
+        if ($refund->status !== RefundStatus::PENDING) {  // comparaison enum
             return response()->json([
                 'success' => false,
                 'message' => 'Ce remboursement a déjà été traité.',
@@ -91,9 +92,9 @@ class RefundController extends Controller
             );
 
             $refund->update([
-                'status' => 'approved',
-                'approved_by' => $request->user()->id,
-                'approved_at' => now(),
+                'status'       => RefundStatus::APPROVED,
+                'approved_by'  => $request->user()->id,
+                'approved_at'  => now(),
             ]);
 
             return response()->json([
@@ -103,12 +104,13 @@ class RefundController extends Controller
             ]);
 
         } catch (\Exception $e) {
+
             Log::error("Erreur remboursement : " . $e->getMessage(), [
                 'refund_id' => $refund->id,
             ]);
 
             $refund->update([
-                'status' => 'failed',
+                'status'        => RefundStatus::FAILED,
                 'error_message' => $e->getMessage(),
             ]);
 

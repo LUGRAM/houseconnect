@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
+use App\Enums\RefundStatus;
 
 class Refund extends Model
 {
@@ -25,18 +26,30 @@ class Refund extends Model
 
     protected $casts = [
         'requested_at' => 'datetime',
-        'approved_at' => 'datetime',
-        'amount' => 'decimal:2',
-    ];
+        'approved_at'  => 'datetime',
+        'amount'       => 'float',  
+        'status' => RefundStatus::class,
+        ];
 
     /*
     |--------------------------------------------------------------------------
     | Relations
     |--------------------------------------------------------------------------
     */
-    public function payment() { return $this->belongsTo(Payment::class); }
-    public function requester() { return $this->belongsTo(User::class, 'requested_by'); }
-    public function approver() { return $this->belongsTo(User::class, 'approved_by'); }
+    public function payment()
+    {
+        return $this->belongsTo(Payment::class);
+    }
+
+    public function requester()
+    {
+        return $this->belongsTo(User::class, 'requested_by');
+    }
+
+    public function approver()
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
 
     /*
     |--------------------------------------------------------------------------
@@ -49,7 +62,7 @@ class Refund extends Model
             ->logOnly(['status', 'amount', 'reason'])
             ->useLogName('refund')
             ->logOnlyDirty()
-            ->setDescriptionForEvent(fn(string $eventName) => "Remboursement {$eventName}");
+            ->setDescriptionForEvent(fn(string $eventName) => "Refund {$eventName}");
     }
 
     /*
@@ -57,19 +70,26 @@ class Refund extends Model
     | Méthodes utilitaires
     |--------------------------------------------------------------------------
     */
+
+    /**
+     * Approuve le remboursement (ADMIN)
+     */
     public function approve(int $adminId): void
     {
         $this->update([
-            'status' => 'approved',
+            'status'      => 'approved',
             'approved_by' => $adminId,
             'approved_at' => now(),
         ]);
     }
 
+    /**
+     * Marque un remboursement comme échoué (par exemple : erreur prestataire)
+     */
     public function fail(string $error): void
     {
         $this->update([
-            'status' => 'failed',
+            'status'        => 'failed',
             'error_message' => $error,
         ]);
     }

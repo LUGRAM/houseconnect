@@ -18,7 +18,7 @@ class AuthServiceProvider extends ServiceProvider
         \App\Models\User::class => \App\Policies\UserPolicy::class,
         \App\Settings\SystemSettings::class => \App\Policies\SystemSettingPolicy::class,
         \Illuminate\Notifications\DatabaseNotification::class => \App\Policies\NotificationPolicy::class,
-
+        \App\Models\Refund::class => \App\Policies\RefundPolicy::class,
     ];
 
     /**

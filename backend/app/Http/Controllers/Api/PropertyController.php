@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Property;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class PropertyController extends Controller
 {
@@ -46,7 +45,7 @@ class PropertyController extends Controller
         $auth = Auth::user();
         $property = Property::findOrFail($id);
 
-        if (!$property->is_validated && !$auth::user()->hasRole('admin') && $property->user_id !== Auth::id()) {
+        if (!$property->is_validated && !$auth->hasRole('admin') && $property->user_id !== Auth::id()) {
             abort(403, 'Accès refusé');
         }
 
@@ -62,7 +61,6 @@ class PropertyController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'title' => 'required|string|max:255',
             'title' => 'required|string|max:255',
             'description' => 'required|string',
             'price' => 'required|numeric|min:0',
@@ -160,8 +158,6 @@ class PropertyController extends Controller
         $properties = Property::where('user_id', $user_id)->get();
 
         return response()->json([
-            'status' => true,
-            'data' => $properties,
             'status' => true,
             'data' => $properties,
         ]);

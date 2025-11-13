@@ -8,7 +8,8 @@ use App\Models\{
     Appointment,
     Payment,
     Expense,
-    Invoice
+    Invoice,
+    Refund
 };
 use Illuminate\Support\Facades\{
     Auth,
@@ -31,55 +32,65 @@ class DashboardService
      * - Factures récentes
      * ---------------------------------------------------------------------
      */
-    public function clientSummary(): array
-    {
-        $user = Auth::user();
+public function clientSummary(): array
+{
+    $user = Auth::user();
 
-        if (! $user) {
-            return [
-                'role' => null,
-                'appointments_count' => 0,
-                'recent_appointments' => [],
-                'payments_total' => 0.00,
-                'recent_payments' => [],
-                'recent_invoices' => [],
-            ];
-        }
-
-        return Cache::remember("dashboard_client_{$user->id}", now()->addMinutes(2), function () use ($user) {
-
-            $appointmentsCount = Appointment::where('user_id', $user->id)->count();
-
-            $recentAppointments = Appointment::where('user_id', $user->id)
-                ->latest()
-                ->take(5)
-                ->get();
-
-            $paymentsTotal = Payment::where('user_id', $user->id)
-                ->where('status', 'success')
-                ->sum('amount');
-
-            $recentPayments = Payment::where('user_id', $user->id)
-                ->where('status', 'success')
-                ->latest()
-                ->take(5)
-                ->get();
-
-            $recentInvoices = Invoice::where('user_id', $user->id)
-                ->latest()
-                ->take(5)
-                ->get();
-
-            return [
-                'role' => 'client',
-                'appointments_count' => (int) $appointmentsCount,
-                'recent_appointments' => $recentAppointments,
-                'payments_total' => (float) number_format($paymentsTotal, 2, '.', ''),
-                'recent_payments' => $recentPayments,
-                'recent_invoices' => $recentInvoices,
-            ];
-        });
+    if (! $user) {
+        return [
+            'role'                => null,
+            'appointments_count'  => 0,
+            'recent_appointments' => [],
+            'upcoming_appointments' => [],
+            'payments_total'      => 0.00,
+            'recent_payments'     => [],
+            'recent_invoices'     => [],
+        ];
     }
+
+    return Cache::remember("dashboard_client_{$user->id}", now()->addMinutes(2), function () use ($user) {
+
+        // RDV récents (derniers 5)
+        $recentAppointments = Appointment::where('user_id', $user->id)
+            ->latest()
+            ->take(5)
+            ->get();
+
+        // RDV des prochaines 24h via ton scope upcoming()
+        $upcomingAppointments = Appointment::where('user_id', $user->id)
+            ->upcoming()
+            ->take(5)
+            ->get();
+
+        $appointmentsCount = Appointment::where('user_id', $user->id)->count();
+
+        $paymentsTotal = Payment::where('user_id', $user->id)
+            ->where('status', 'success')
+            ->sum('amount');
+
+        $recentPayments = Payment::where('user_id', $user->id)
+            ->where('status', 'success')
+            ->latest()
+            ->take(5)
+            ->get();
+
+        $recentInvoices = Invoice::where('user_id', $user->id)
+            ->latest()
+            ->take(5)
+            ->get();
+
+        return [
+            'role'                 => 'client',
+            'appointments_count'   => (int) $appointmentsCount,
+            'recent_appointments'  => $recentAppointments,
+            'upcoming_appointments' => $upcomingAppointments,
+            'payments_total'       => (float) number_format($paymentsTotal, 2, '.', ''),
+            'recent_payments'      => $recentPayments,
+            'recent_invoices'      => $recentInvoices,
+        ];
+    });
+}
+
 
 
     /**
@@ -145,11 +156,10 @@ class DashboardService
      * ---------------------------------------------------------------------
      * - Statistiques globales
      * - Répartition utilisateurs
-     * - Nombre total de biens
-     * - Nombre total de rendez-vous
-     * - Revenus globaux
-     * - Dépenses globales
-     * - Balance net
+     * - Biens, rendez-vous
+     * - Paiements, dépenses
+     * - Remboursements
+     * - Balance nette
      * - Graphiques sur N jours
      * ---------------------------------------------------------------------
      */
@@ -159,32 +169,43 @@ class DashboardService
 
         return Cache::remember($cacheKey, now()->addMinutes(5), function () use ($days) {
 
+            // Utilisateurs
             $totalAdmins    = User::role('admin')->count();
             $totalBailleurs = User::role('bailleur')->count();
             $totalClients   = User::role('client')->count();
 
+            // Propriétés & RDV
             $totalProperties   = Property::count();
             $totalAppointments = Appointment::count();
 
-            $totalPayments = Payment::where('status', 'success')->sum('amount');
-            $totalExpenses = Expense::sum('amount');
+            // Paiements & dépenses
+            $totalPayments = (float) Payment::where('status', 'success')->sum('amount');
+            $totalExpenses = (float) Expense::sum('amount');
 
-            $netBalance = $totalPayments - $totalExpenses;
+            // Remboursements
+            $totalRefunds = (float) Refund::where('status', 'approved')->sum('amount');
+            $pendingRefunds = Refund::where('status', 'pending')->count();
+            $failedRefunds  = Refund::where('status', 'failed')->count();
 
+            // Balance nette réelle
+            $netBalance = $totalPayments - $totalExpenses - $totalRefunds;
+
+            // Paiements récents
             $recentPayments = Payment::select(
-                DB::raw('DATE(created_at) as date'),
-                DB::raw('SUM(amount) as total')
-            )
+                    DB::raw('DATE(created_at) as date'),
+                    DB::raw('SUM(amount) as total')
+                )
                 ->where('status', 'success')
                 ->where('created_at', '>=', now()->subDays($days))
                 ->groupBy('date')
                 ->orderBy('date')
                 ->get();
 
+            // Inscriptions récentes
             $recentUsers = User::select(
-                DB::raw('DATE(created_at) as date'),
-                DB::raw('COUNT(*) as total')
-            )
+                    DB::raw('DATE(created_at) as date'),
+                    DB::raw('COUNT(*) as total')
+                )
                 ->where('created_at', '>=', now()->subDays($days))
                 ->groupBy('date')
                 ->orderBy('date')
@@ -216,6 +237,12 @@ class DashboardService
                     'total' => (float) number_format($totalExpenses, 2, '.', ''),
                 ],
 
+                'refunds' => [
+                    'total_approved' => (float) number_format($totalRefunds, 2, '.', ''),
+                    'pending'        => (int) $pendingRefunds,
+                    'failed'         => (int) $failedRefunds,
+                ],
+
                 'balance' => [
                     'net' => (float) number_format($netBalance, 2, '.', ''),
                 ],
@@ -227,4 +254,5 @@ class DashboardService
             ];
         });
     }
+
 }

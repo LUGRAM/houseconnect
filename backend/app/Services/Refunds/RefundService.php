@@ -51,29 +51,34 @@ class RefundService
      */
     private function calculateRefundAmount(Payment $payment): float
     {
+        // Visites
         if ($payment->type === PaymentType::VISIT->value && $payment->appointment) {
+
             $appointment = $payment->appointment;
             $hoursBefore = Carbon::now()->diffInHours($appointment->scheduled_at, false);
 
             // Annulé par bailleur → remboursement total
             if ($appointment->cancelled_by === 'bailleur') {
-                return $payment->amount;
+                return (float) $payment->amount;
             }
 
             // Annulé par client → politique de délai
             if ($appointment->cancelled_by === 'client') {
+
                 if ($hoursBefore >= 24) {
-                    return $payment->amount * 0.8; // 80%
+                    return (float) ($payment->amount * 0.8); // 80%
                 }
-                return 0; // Non remboursé < 24h
+
+                return 0.0;
             }
         }
 
-        // Remboursements de loyer (rent)
+        // Loyers
         if ($payment->type === PaymentType::RENT->value) {
-            return $payment->amount * 0.5; // 50 % par défaut si bail annulé avant entrée
+            return (float) ($payment->amount * 0.5); // 50%
         }
 
         return 0.0;
     }
+
 }
